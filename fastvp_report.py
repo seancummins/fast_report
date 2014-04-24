@@ -210,10 +210,10 @@ allPools = efdPools + fcPools + sataPools + otherPools
 # Build the report table
 report = list()
 
-if args.nosgs:
-    header = ['TDEV', 'TotalGB', 'WrittenGB', 'BoundPool', 'FastSG', 'FastPolicy', 'Policy%'] + allPools
-else:
+if args.showallsgs:
     header = ['TDEV', 'TotalGB', 'WrittenGB', 'SGs', 'BoundPool', 'FastSG', 'FastPolicy', 'Policy%'] + allPools
+else:
+    header = ['TDEV', 'TotalGB', 'WrittenGB', 'BoundPool', 'FastSG', 'FastPolicy', 'Policy%'] + allPools
 
 for tdev in tdevdata:
     totalGB = tdevdata[tdev]['totalGB']
@@ -250,10 +250,10 @@ for tdev in tdevdata:
         allPoolsGB.append(poolGB)
 
     row = list()
-    if args.nosgs:
-        row = [tdev, totalGB, writtenGB, bound_pool, fastsg, fastpolicy, tierpct] + allPoolsGB
-    else:
+    if args.showallsgs:
         row = [tdev, totalGB, writtenGB, sgs, bound_pool, fastsg, fastpolicy, tierpct] + allPoolsGB
+    else:
+        row = [tdev, totalGB, writtenGB, bound_pool, fastsg, fastpolicy, tierpct] + allPoolsGB
 
     report.append(row)
 
