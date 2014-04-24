@@ -12,11 +12,14 @@ Requirements:
 
 import argparse
 import subprocess
+import sys
 from collections import OrderedDict
 try:
     import xml.etree.cElementTree as ET
 except ImportError:
     import xml.etree.ElementTree as ET
+sys.path.append('/opt/emc/SYMCLI/bin')
+
 
 def symcli_gentree(command):
     command += ' -output xml_e'
@@ -24,26 +27,64 @@ def symcli_gentree(command):
     return result
 
 
-def format_matrix(my_matrix):
-    # Stolen from David Robinson (http://stackoverflow.com/a/8747570)
+def matrix_to_string(matrix, header=None):
+    # Stolen from http://mybravenewworld.wordpress.com/2010/09/19/print-tabular-data-nicely-using-python/
     """
-    Return a pretty, aligned string representation of a matrix
-    (i.e. -- a 'square' list of lists)
-    """
-    import string
-    max_lens = [max([len(str(r[i])) for r in my_matrix])
-                for i in range(len(my_matrix[0]))]
+    Return a pretty, aligned string representation of a nxm matrix.
 
-    return "\n".join(["".join([string.ljust(str(e), l + 2)
-                     for e, l in zip(r, max_lens)]) for r in my_matrix])
+    This representation can be used to print any tabular data, such as
+    database results. It works by scanning the lengths of each element
+    in each column, and determining the format string dynamically.
+
+    @param matrix: Matrix representation (list with n rows of m elements).
+    @param header: Optional tuple or list with header elements to be displayed.
+    """
+    if type(header) is list:
+        header = tuple(header)
+    lengths = []
+    if header:
+        for column in header:
+            lengths.append(len(column))
+    for row in matrix:
+        for column in row:
+            i = row.index(column)
+            column = str(column)
+            cl = len(column)
+            try:
+                ml = lengths[i]
+                if cl > ml:
+                    lengths[i] = cl
+            except IndexError:
+                lengths.append(cl)
+
+    lengths = tuple(lengths)
+    format_string = ""
+    for length in lengths:
+        format_string += "%-" + str(length) + "s   "
+    format_string += "\n"
+
+    matrix_str = ""
+    if header:
+        matrix_str += format_string % header
+    for row in matrix:
+        matrix_str += format_string % tuple(row)
+
+    return matrix_str
+
 
 ### Define and Parse CLI arguments
 parser = argparse.ArgumentParser(description='Reports FASTVP information per Symmetrix Device.')
 rflags = parser.add_argument_group('Required arguments')
 rflags.add_argument('-sid',      required=True, help='Symmetrix serial number')
-oflags = parser.add_argument_group('Additional optional arguments')
-oflags.add_argument('-csv',                help='Flag; Outputs in CSV format', action="store_true")
+sflags = parser.add_argument_group('Additional optional arguments')
+sflags.add_argument('-showallsgs',         help='Flag; Shows all Storage Groups (not just FASTVP SGs)', action="store_true")
+sflags.add_argument('-csv',                help='Flag; Outputs in CSV format', action="store_true")
+sflags.add_argument('-quotedcsv',          help='Flag; Outputs in quoted CSV format', action="store_true")
 args = parser.parse_args()
+if args.csv and args.quotedcsv:
+    print('Syntax Error: Flags -csv and -quotedcsv are mutually exlusive; please choose one or the other.')
+    exit(1)
+
 
 ### Capture TDEV, FASTVP, and SG information into ET Trees
 tdevtree = symcli_gentree('symcfg -sid %s list -tdev -gb -detail' % args.sid)
@@ -54,13 +95,12 @@ pooltree = symcli_gentree('symcfg -sid %s list -thin -pool -detail -gb' % args.s
 
 ### Put FASTVP Associations into dictionary
 fastAssoc = dict()
+fastdata = dict()
 for elem in fasttree.iterfind('Symmetrix/Fast_Association/Association_Info'):
     sg_name = elem.find('sg_name').text
     policy_name = elem.find('policy_name').text
     fastAssoc[sg_name] = policy_name
 
-### Put FASTVP Policy tier percentage information into dictionary
-fastPolicyPct = dict()
 for elem in fastptree.iterfind('Symmetrix/Fast_Policy'):
     policy = 'EFD/FC/SATA'
     policyName = elem.find('Policy_Info/policy_name').text
@@ -68,7 +108,10 @@ for elem in fastptree.iterfind('Symmetrix/Fast_Policy'):
         tierTech = tier.find('tier_tech').text
         tierPct = tier.find('tier_max_sg_per').text
         policy = policy.replace(tierTech, tierPct, 1)
-    fastPolicyPct[policyName] = policy
+    policy = policy.replace("EFD", '0', 1)
+    policy = policy.replace("FC", '0', 1)
+    policy = policy.replace("SATA", '0', 1)
+    fastdata[policyName] = policy
 
 ### Put Pool tech type into dictionary
 poolTech = dict()
@@ -76,6 +119,9 @@ for elem in pooltree.iterfind('Symmetrix/DevicePool'):
     poolName = elem.find('pool_name').text
     techType = elem.find('technology').text
     poolTech[poolName] = techType
+
+# List of all pools
+allPools = list()
 
 ### Put TDEV information values into data structure
 # tdevdata{ 'tdev1' :
@@ -93,9 +139,6 @@ for elem in pooltree.iterfind('Symmetrix/DevicePool'):
 #                     }
 #         }
 tdevdata = OrderedDict()
-
-# List of all pools
-allPools = list()
 
 # Iterate through all TDEVs, capturing capacity information
 for elem in tdevtree.iterfind('Symmetrix/ThinDevs/Device'):
@@ -138,13 +181,17 @@ for elem in sgtree.iterfind('SG'):
                 except KeyError:
                     # This seems to be related to SYMAPIDB inconsistencies
                     tdevdata[dev_name]['fastpolicy'] = "<NotFound>"
+                    fastdata["<NotFound>"] = "<NotFound>"
         else:
             # We've encountered a device in an SG that no longer exists; ignore it.
             pass
 
 
 # Reorder allPools list by techType defined in poolTech
-efdPools, fcPools, sataPools, otherPools = list(), list(), list(), list()
+efdPools = list()
+fcPools = list()
+sataPools = list()
+otherPools = list()
 for pool in allPools:
     if poolTech[pool] == "EFD":
         efdPools.append(pool)
@@ -154,45 +201,69 @@ for pool in allPools:
         sataPools.append(pool)
     else:
         otherPools.append(pool)
-# Sort pool lists
-for poolList in [efdPools, fcPools, sataPools, otherPools]:
-    poolList.sort()
+efdPools.sort()
+fcPools.sort()
+sataPools.sort()
+otherPools.sort()
 allPools = efdPools + fcPools + sataPools + otherPools
 
-# Build the report table (a 'list of lists' matrix)
+# Build the report table
 report = list()
-header = ['TDEV', 'TotalGB', 'WrittenGB', 'BoundPool', 'FastSG', 'FastPolicy', 'Policy%'] + allPools
-report.append(header)
+
+if args.nosgs:
+    header = ['TDEV', 'TotalGB', 'WrittenGB', 'BoundPool', 'FastSG', 'FastPolicy', 'Policy%'] + allPools
+else:
+    header = ['TDEV', 'TotalGB', 'WrittenGB', 'SGs', 'BoundPool', 'FastSG', 'FastPolicy', 'Policy%'] + allPools
 
 for tdev in tdevdata:
     totalGB = tdevdata[tdev]['totalGB']
     writtenGB = tdevdata[tdev]['writtenGB']
 
-    # Reset all values to defaults
-    sgs, bound_pool, fastsg, fastpolicy, tierpct = ("",)*5
-    poolGB = 0.0
-    allPoolsGB = list()
-
     if 'sgs' in tdevdata[tdev]:
         sgs = " ".join(tdevdata[tdev]['sgs'])
+    else:
+        sgs = ""
+
     if 'bound_pool' in tdevdata[tdev]:
         bound_pool = tdevdata[tdev]['bound_pool']
+    else:
+        bound_pool = ""
+
     if 'fastsg' in tdevdata[tdev]:
         fastsg = tdevdata[tdev]['fastsg']
+    else:
+        fastsg = ""
+
     if 'fastpolicy' in tdevdata[tdev]:
         fastpolicy = tdevdata[tdev]['fastpolicy']
-        tierpct = fastPolicyPct[fastpolicy]
+        tierpct = fastdata[fastpolicy]
+    else:
+        fastpolicy = ""
+        tierpct = ""
 
+    allPoolsGB = list()
     for pool in allPools:
         if pool in tdevdata[tdev]['allocGB']:
             poolGB = tdevdata[tdev]['allocGB'][pool]
+        else:
+            poolGB = 0
         allPoolsGB.append(poolGB)
-        poolGB = 0.0
 
-    report.append([tdev, totalGB, writtenGB, bound_pool, fastsg, fastpolicy, tierpct] + allPoolsGB)
+    row = list()
+    if args.nosgs:
+        row = [tdev, totalGB, writtenGB, bound_pool, fastsg, fastpolicy, tierpct] + allPoolsGB
+    else:
+        row = [tdev, totalGB, writtenGB, sgs, bound_pool, fastsg, fastpolicy, tierpct] + allPoolsGB
+
+    report.append(row)
 
 if args.csv:
+    print(','.join(header))
     for row in report:
         print(','.join(str(x) for x in row))
+elif args.quotedcsv:
+    print('"' + '","'.join(header) + '"')
+    for row in report:
+        print('"' + '","'.join(str(x) for x in row) + '"')
 else:
-    print(format_matrix(report))
+    print(matrix_to_string(report, header))
