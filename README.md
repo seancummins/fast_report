@@ -32,7 +32,7 @@ Additional optional arguments:
 # Example Output
 
 ```
-TDEV    TotalGB   WrittenGB   BoundPool   FastSG                           FastPolicy   Policy%       EFDR531   FC15KR531   SATAR662
+TDEV    TotalGB   WrittenGB   BoundPool   FastSG                        FastPolicy   Policy%       EFDR531   FC15KR531   SATAR662
 02080   1024.0    540.4       FC15KR531   esx_prod_01                   Production   100/100/100   52.7      166.3       330.0
 02088   2048.0    1860.4      FC15KR531   esx_backup01                  Production   100/100/100   55.1      703.7       1102.1
 02098   1024.0    752.3       FC15KR531   esx_prod_01                   Production   100/100/100   29.1      165.0       599.1
