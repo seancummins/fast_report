@@ -1,10 +1,10 @@
-#!/usr/bin/env python -u
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 fastvp_report.py - Reports per-device Symmetrix FASTVP policies & associations, capacity, and binding information
 
 Requirements:
-- Python 2.7.x (haven't tested in 3.x, but it might work)
+- Python 3.x
 - EMC Solutions Enabler
 - SYMCLI bin directory in PATH
 
