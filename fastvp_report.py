@@ -144,7 +144,7 @@ tdevdata = OrderedDict()
 for elem in tdevtree.iterfind('Symmetrix/ThinDevs/Device'):
     dev_name = elem.find('dev_name').text
     totalGB = float(elem.find('total_tracks_gb').text)
-    writtenGB = float(elem.find('written_tracks_gb').text)
+#    writtenGB = float(elem.find('written_tracks_gb').text)
     totalAllocGB = float(elem.find('alloc_tracks_gb').text)
 
     # Create data structure skeleton before we start populating it with values
@@ -154,7 +154,7 @@ for elem in tdevtree.iterfind('Symmetrix/ThinDevs/Device'):
         tdevdata[dev_name]['sgs'] = list()
 
     tdevdata[dev_name]['totalGB'] = totalGB
-    tdevdata[dev_name]['writtenGB'] = writtenGB
+#    tdevdata[dev_name]['writtenGB'] = writtenGB
     tdevdata[dev_name]['totalAllocGB'] = totalAllocGB
 
     # Get per-pool allocation information and place into data structure
@@ -211,13 +211,13 @@ allPools = efdPools + fcPools + sataPools + otherPools
 report = list()
 
 if args.showallsgs:
-    header = ['TDEV', 'TotalGB', 'WrittenGB', 'SGs', 'BoundPool', 'FastSG', 'FastPolicy', 'Policy%'] + allPools
+    header = ['TDEV', 'TotalGB', 'AllocGB', 'SGs', 'BoundPool', 'FastSG', 'FastPolicy', 'Policy%'] + allPools
 else:
-    header = ['TDEV', 'TotalGB', 'WrittenGB', 'BoundPool', 'FastSG', 'FastPolicy', 'Policy%'] + allPools
+    header = ['TDEV', 'TotalGB', 'AllocGB', 'BoundPool', 'FastSG', 'FastPolicy', 'Policy%'] + allPools
 
 for tdev in tdevdata:
     totalGB = tdevdata[tdev]['totalGB']
-    writtenGB = tdevdata[tdev]['writtenGB']
+    allocGB = tdevdata[tdev]['totalAllocGB']
 
     if 'sgs' in tdevdata[tdev]:
         sgs = " ".join(tdevdata[tdev]['sgs'])
@@ -251,9 +251,9 @@ for tdev in tdevdata:
 
     row = list()
     if args.showallsgs:
-        row = [tdev, totalGB, writtenGB, sgs, bound_pool, fastsg, fastpolicy, tierpct] + allPoolsGB
+        row = [tdev, totalGB, totalAllocGB, sgs, bound_pool, fastsg, fastpolicy, tierpct] + allPoolsGB
     else:
-        row = [tdev, totalGB, writtenGB, bound_pool, fastsg, fastpolicy, tierpct] + allPoolsGB
+        row = [tdev, totalGB, totalAllocGB, bound_pool, fastsg, fastpolicy, tierpct] + allPoolsGB
 
     report.append(row)
 
